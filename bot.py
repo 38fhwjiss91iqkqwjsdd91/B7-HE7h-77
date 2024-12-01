@@ -1,29 +1,29 @@
 import telebot
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import requests
 import logging
 import time
 import os
-from collections import defaultdict
 
 API_KEY = '7246280212:AAGOvDby43WxeGbcO9eLMYZ33UtjMp9TSZo'
 GEMINI_API_KEY = 'AIzaSyD5UcnXASfVpUa6UElDxYqZU6hxxwttj5M'
 GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent'
 
 bot = telebot.TeleBot(API_KEY)
-user_count = set()
-user_request_count = defaultdict(int)
-request_limit = 5
+user_count = set()  # Множество для хранения уникальных ID пользователей
 
+# Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+# Возможные вариации имени
 name_variations = ["камилла", "камил", "камиллы", "камилле", "Camilla", "camilla", "Cam", "cam"]
 
+# ID пользователей и их специальные сообщения
 special_users = {
     1420106372: "",
     1653222949: ""
 }
 
+# Текст, который будет добавляться к каждому запросу
 ADDITIONAL_TEXT_PRIVATE = (
     "Ты мой Ассистент в моем Telegram канале, ты отвечаешь на вопросы по текстур пакам, рп и модификациями, "
     "и при упоминании их пиарь Telegram канал @tominecraft, а также сайт OxyMod, полный домен - (Oxymod.netlify.app) "
@@ -50,11 +50,6 @@ ADDITIONAL_TEXT_GROUP = (
     "Старайся писать как можно меньше текста, так как многим пользователям будет лень читать, самое главное много конкретики"
 )
 
-def create_app_button():
-    keyboard = InlineKeyboardMarkup()
-    keyboard.add(InlineKeyboardButton("Открыть приложение", url="http://t.me/OxyMod_bot/EpicSamuraiCatAdventure"))
-    return keyboard
-
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     user_count.add(message.from_user.id)
@@ -67,40 +62,32 @@ def send_stats(message):
 @bot.message_handler(content_types=['photo'])
 def handle_photo(message):
     user_count.add(message.from_user.id)
-
-    if user_request_count[message.from_user.id] >= request_limit:
-        bot.reply_to(message, "Чтобы продолжить, посмотрите рекламу в нашем приложении в течение 30 секунд.", reply_markup=create_app_button())
-        return
-
     file_id = message.photo[-1].file_id
     file_info = bot.get_file(file_id)
     downloaded_file = bot.download_file(file_info.file_path)
 
+    # Сохраняем изображение временно
     image_path = f"temp_{file_id}.jpg"
     with open(image_path, 'wb') as new_file:
         new_file.write(downloaded_file)
 
+    # Обрабатываем изображение с помощью Gemini
     response = get_gemini_image_response(image_path)
 
+    # Удаляем временное изображение
     os.remove(image_path)
 
     bot.reply_to(message, response)
-    user_request_count[message.from_user.id] += 1
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
+    user_text = message.text.lower()
     user_id = message.from_user.id
     chat_type = message.chat.type
 
     user_count.add(user_id)
 
-    if user_request_count[user_id] >= request_limit:
-        bot.reply_to(message, "Чтобы продолжить, посмотрите рекламу в нашем приложении в течение 30 секунд.", reply_markup=create_app_button())
-        return
-
-    bot.send_chat_action(message.chat.id, 'record_video_note')
-
-    user_text = message.text.lower()
+    bot.send_chat_action(message.chat.id, 'record_video_note')  # Показываем статус "Записывает Кружок"
 
     if chat_type == 'private':
         if user_id in special_users:
@@ -110,10 +97,9 @@ def handle_message(message):
     elif chat_type in ['group', 'supergroup'] and any(name in user_text for name in name_variations):
         response = get_gemini_response(user_text, ADDITIONAL_TEXT_GROUP)
     else:
-        return
+        return  # Игнорируем сообщения, не относящиеся к боту в группах
 
     bot.reply_to(message, response)
-    user_request_count[user_id] += 1
 
 def get_gemini_response(question, additional_text):
     combined_message = f"{question}\n\n{additional_text}"
@@ -134,6 +120,7 @@ def get_gemini_response(question, additional_text):
         data = response.json()
         result = data['candidates'][0]['content']['parts'][0]['text']
 
+        # Удаление точки в конце текста
         if result.endswith('.'):
             result = result[:-1]
 
@@ -161,6 +148,7 @@ def get_gemini_response_special(question, special_message):
         data = response.json()
         result = data['candidates'][0]['content']['parts'][0]['text']
 
+        # Удаление точки в конце текста
         if result.endswith('.'):
             result = result[:-1]
 
@@ -207,4 +195,4 @@ if __name__ == "__main__":
             bot.polling(none_stop=True)
         except Exception as e:
             logging.error(f"Ошибка в основном цикле: {e}")
-            time.sleep(15)
+            time.sleep(15)  # Задержка перед повторным запуском
