@@ -3,8 +3,7 @@ import requests
 import logging
 import time
 import os
-from Russian-promt import ADDITIONAL_TEXT_PRIVATE_RU, ADDITIONAL_TEXT_GROUP_RU
-from American-promt import ADDITIONAL_TEXT_PRIVATE_EN, ADDITIONAL_TEXT_GROUP_EN
+import re
 
 API_KEY = '7246280212:AAGOvDby43WxeGbcO9eLMYZ33UtjMp9TSZo'
 GEMINI_API_KEY = 'AIzaSyA8DmFWWdk7ni5gaNHL_3Vkv2nMox-WB6M'
@@ -26,34 +25,37 @@ special_users = {
 }
 
 def detect_language(text):
-    eng_chars = len([c for c in text.lower() if 'a' <= c <= 'z'])
-    rus_chars = len([c for c in text.lower() if 'а' <= c <= 'я'])
-    return 'en' if eng_chars > rus_chars else 'ru'
+    """
+    Определяет преобладающий язык в тексте.
+    Возвращает 'russian' или 'english'
+    """
+    russian_chars = len(re.findall(r'[а-яА-Я]', text))
+    english_chars = len(re.findall(r'[a-zA-Z]', text))
+    
+    return 'russian' if russian_chars >= english_chars else 'english'
 
-@bot.message_handler(func=lambda message: True)
-def handle_message(message):
-    user_text = message.text.lower()
-    user_id = message.from_user.id
-    chat_type = message.chat.type
-    language = detect_language(user_text)
-
-    user_count.add(user_id)
-
-    bot.send_chat_action(message.chat.id, 'record_video_note')
-
-    if chat_type == 'private':
-        if user_id in special_users:
-            response = get_gemini_response_special(user_text, special_users[user_id])
+def load_prompt(language, is_private=True):
+    """
+    Загружает промт в зависимости от языка и типа чата
+    """
+    try:
+        if language == 'russian':
+            if is_private:
+                with open('Russian-promt.py', 'r', encoding='utf-8') as f:
+                    return f.read()
+            else:
+                with open('Russian-promt.py', 'r', encoding='utf-8') as f:
+                    return f.read()
         else:
-            additional_text = ADDITIONAL_TEXT_PRIVATE_EN if language == 'en' else ADDITIONAL_TEXT_PRIVATE_RU
-            response = get_gemini_response(user_text, additional_text)
-    elif chat_type in ['group', 'supergroup'] and any(name in user_text for name in name_variations):
-        additional_text = ADDITIONAL_TEXT_GROUP_EN if language == 'en' else ADDITIONAL_TEXT_GROUP_RU
-        response = get_gemini_response(user_text, additional_text)
-    else:
-        return
-
-    bot.reply_to(message, response)
+            if is_private:
+                with open('American-promt.py', 'r', encoding='utf-8') as f:
+                    return f.read()
+            else:
+                with open('American-promt.py', 'r', encoding='utf-8') as f:
+                    return f.read()
+    except FileNotFoundError:
+        logging.error(f"Файл промта для языка {language} не найден!")
+        return ""
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
@@ -94,13 +96,19 @@ def handle_message(message):
 
     bot.send_chat_action(message.chat.id, 'record_video_note')  # Показываем статус "Записывает Кружок"
 
+    # Определяем язык
+    detected_language = detect_language(user_text)
+
     if chat_type == 'private':
+        additional_prompt = load_prompt(detected_language, is_private=True)
+        
         if user_id in special_users:
-            response = get_gemini_response_special(user_text, special_users[user_id])
+            response = get_gemini_response_special(user_text, special_users[user_id], additional_prompt)
         else:
-            response = get_gemini_response(user_text, ADDITIONAL_TEXT_PRIVATE)
+            response = get_gemini_response(user_text, additional_prompt)
     elif chat_type in ['group', 'supergroup'] and any(name in user_text for name in name_variations):
-        response = get_gemini_response(user_text, ADDITIONAL_TEXT_GROUP)
+        additional_prompt = load_prompt(detected_language, is_private=False)
+        response = get_gemini_response(user_text, additional_prompt)
     else:
         return  # Игнорируем сообщения, не относящиеся к боту в группах
 
@@ -134,8 +142,8 @@ def get_gemini_response(question, additional_text):
         logging.error(f"Ошибка при обращении к Gemini API: {e}")
         return "извините, произошла ошибка при обработке запроса"
 
-def get_gemini_response_special(question, special_message):
-    combined_message = f"{question}\n\n{special_message}\n\n{ADDITIONAL_TEXT_PRIVATE}"
+def get_gemini_response_special(question, special_message, additional_text):
+    combined_message = f"{question}\n\n{special_message}\n\n{additional_text}"
 
     payload = {
         "contents": [{
