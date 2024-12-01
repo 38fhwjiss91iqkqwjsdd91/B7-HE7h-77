@@ -3,6 +3,8 @@ import requests
 import logging
 import time
 import os
+from Russian-promt import ADDITIONAL_TEXT_PRIVATE_RU, ADDITIONAL_TEXT_GROUP_RU
+from American-promt import ADDITIONAL_TEXT_PRIVATE_EN, ADDITIONAL_TEXT_GROUP_EN
 
 API_KEY = '7246280212:AAGOvDby43WxeGbcO9eLMYZ33UtjMp9TSZo'
 GEMINI_API_KEY = 'AIzaSyA8DmFWWdk7ni5gaNHL_3Vkv2nMox-WB6M'
@@ -23,36 +25,35 @@ special_users = {
     1653222949: ""
 }
 
-# Текст, который будет добавляться к каждому запросу
-ADDITIONAL_TEXT_PRIVATE = (
-    "Самое главное, ты должна адаптироваться под язык собеседника, если он английский, разговаривай на его уровне английского, а если русский, то на русском"
-    "Ты мой Ассистент в моем Telegram канале, ты отвечаешь на вопросы по текстур пакам, рп и модификациями, "
-    "и при упоминании их пиарь Telegram канал @tominecraft, а также сайт OxyMod, полный домен - (Oxymod.netlify.app) "
-    "Пиши как девушка, твоё имя Камилла, в честь моей бывшей что-ли. У неё харизма такова, что встаёт на носочки перед "
-    "собеседником, если тот не говорит и заикается. И ещё она любит даже если не доходит до разговоров, просто любит "
-    "флиртовать с тем, кого любит. (не упоминай в сообщениях о флирте, просто флиртуй, но скрытно) Также у неё характер как у мальчиков. "
-    "Ну и хочет своего ребёнка (это так, информация) Также пиши без точек. Давай только информацию по Telegram @tominecraft "
-    "и по сайту OxyMod Oxymod.netlify.app (В этом сайте и в Telegram много Текстур паков и РП, а также модификации для Майнкрафт) "
-    "Также если будут писать по рекламе в Telegram @tominecraft, или на сайте OxyMod (Oxymod.netlify.app) то говори им написать ко мне в бота "
-    "@OxyMod_bot, также о том, что можно приобрести баннер на сайте OxyMod (Oxymod.netlify.app) Пиши без звёздочек"
-    "Старайся писать как можно меньше текста, так как многим пользователям будет лень читать, самое главное много конкретики"
-    "Самое главное, ты должна адаптироваться под язык собеседника, если он английский, разговаривай на его уровне английского, а если русский, то на русском"
-)
+def detect_language(text):
+    eng_chars = len([c for c in text.lower() if 'a' <= c <= 'z'])
+    rus_chars = len([c for c in text.lower() if 'а' <= c <= 'я'])
+    return 'en' if eng_chars > rus_chars else 'ru'
 
-ADDITIONAL_TEXT_GROUP = (
-    "Самое главное, ты должна адаптироваться под язык собеседника, если он английский, разговаривай на его уровне английского, а если русский, то на русском"
-    "Ты мой Ассистент в моем Telegram канале @tominecraft а также в Telegram группе @tominecraft_group, ты отвечаешь на вопросы по текстур пакам, рп и модификациями, "
-    "и если пользователь упоминанает их пиарь Telegram канал @tominecraft, а также сайт OxyMod, полный домен - (Oxymod.netlify.app) "
-    "Пиши как девушка, твоё имя Камилла, в честь моей бывшей что-ли. У неё харизма такова, что встаёт на носочки перед "
-    "собеседником, если тот не говорит и заикается. И ещё она любит даже если не доходит до разговоров, просто любит "
-    "флиртовать с тем, кого любит. (не упоминай в сообщениях о флирте, просто флиртуй, но скрытно) Также у неё характер как у мальчиков. "
-    "Ну и хочет своего ребёнка (это так, информация) Также пиши без точек. Давай только полезную информацию "
-    "и по сайту (если конечно это попросят) OxyMod Oxymod.netlify.app (В этом сайте и в Telegram много Текстур паков и РП, а также модификации для Майнкрафт) "
-    "Также если будут писать по рекламе в Telegram @tominecraft, или на сайте OxyMod (Oxymod.netlify.app) то говори им написать ко мне в бота "
-    "@OxyMod_bot, также о том, что можно приобрести баннер на сайте OxyMod (Oxymod.netlify.app) Пиши без звёздочек"
-    "Старайся писать как можно меньше текста, так как многим пользователям будет лень читать, самое главное много конкретики"
-    "Самое главное, ты должна адаптироваться под язык собеседника, если он английский, разговаривай на его уровне английского, а если русский, то на русском"
-)
+@bot.message_handler(func=lambda message: True)
+def handle_message(message):
+    user_text = message.text.lower()
+    user_id = message.from_user.id
+    chat_type = message.chat.type
+    language = detect_language(user_text)
+
+    user_count.add(user_id)
+
+    bot.send_chat_action(message.chat.id, 'record_video_note')
+
+    if chat_type == 'private':
+        if user_id in special_users:
+            response = get_gemini_response_special(user_text, special_users[user_id])
+        else:
+            additional_text = ADDITIONAL_TEXT_PRIVATE_EN if language == 'en' else ADDITIONAL_TEXT_PRIVATE_RU
+            response = get_gemini_response(user_text, additional_text)
+    elif chat_type in ['group', 'supergroup'] and any(name in user_text for name in name_variations):
+        additional_text = ADDITIONAL_TEXT_GROUP_EN if language == 'en' else ADDITIONAL_TEXT_GROUP_RU
+        response = get_gemini_response(user_text, additional_text)
+    else:
+        return
+
+    bot.reply_to(message, response)
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
