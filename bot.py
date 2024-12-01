@@ -1,94 +1,109 @@
 import telebot
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import requests
 import logging
 import time
-from collections import defaultdict
+import os
 
-API_KEY = '7441566490:AAHgpFjpFmWrkJVr-QF-n1T74-PR30eXYCM'
+API_KEY = '7246280212:AAGOvDby43WxeGbcO9eLMYZ33UtjMp9TSZo'
 GEMINI_API_KEY = 'AIzaSyA8DmFWWdk7ni5gaNHL_3Vkv2nMox-WB6M'
 GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent'
-CHANNEL_ID = '@Monopolist_Survivor'  # ID или @username канала
 
-bot = telebot.TeleBot(API_KEY, parse_mode="Markdown")
-user_count = set()
-user_request_count = defaultdict(int)
-user_modes = {}
+bot = telebot.TeleBot(API_KEY)
+user_count = set()  # Множество для хранения уникальных ID пользователей
 
+# Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-PROGRAMMER_PROMPT = """
-Создай пост в стиле вдохновляющего и познавательного бизнес-замеки с кратким, но сильным тезисом. 
-Тема постов должна быть связана с финансами, бизнесом, финансовой грамотностью и мотивацией. 
-Стиль постов — простой и понятный, как будто человек делится личным опытом. 
-Каждый пост должен заканчиваться фразой, подчеркивающей основную мысль, и содержать подпись "©️ Монополист" и хештеги, 
-например, #Бизнес или #Финграм. Тон должен быть уверенным, но не высокомерным. 
-Приводите примеры из реальной жизни или истории компаний. Оформляй посты с короткими абзацами для удобства восприятия. СОЗДАЙ ТОЛЬКО 1 ТЕЗИС, НЕ УПОМИНАЯ СЛОВО ТЕЗИС И Т.П, СДЕЛАЙ ПУСТЫЕ СТРОЧКИ ПРИ ДРУГОМ ДРУГИХ ПРЕДЛОЖЕНИЯХ, И В ПЕРВОМ ТАКОМ ПРЕДЛОЖЕНИИ ПОСЛЕ ВСТУПЛЕНИЯ В НАЧАЛЕ ОСТАВЛЯЙ ТАКОЙ СИМВОЛ "
-▷ "
-"""
+# Возможные вариации имени
+name_variations = ["камилла", "камил", "камиллы", "камилле", "Camilla", "camilla", "Cam", "cam"]
 
-AUTHORIZED_USER_ID = 1420106372  # ID разрешенного пользователя
+# ID пользователей и их специальные сообщения
+special_users = {
+    1420106372: "",
+    1653222949: ""
+}
 
-def is_authorized(user_id):
-    return user_id == AUTHORIZED_USER_ID
+# Текст, который будет добавляться к каждому запросу
+ADDITIONAL_TEXT_PRIVATE = (
+    "Ты мой Ассистент в моем Telegram канале, ты отвечаешь на вопросы по текстур пакам, рп и модификациями, "
+    "и при упоминании их пиарь Telegram канал @tominecraft, а также сайт OxyMod, полный домен - (Oxymod.netlify.app) "
+    "Пиши как девушка, твоё имя Камилла, в честь моей бывшей что-ли. У неё харизма такова, что встаёт на носочки перед "
+    "собеседником, если тот не говорит и заикается. И ещё она любит даже если не доходит до разговоров, просто любит "
+    "флиртовать с тем, кого любит. (не упоминай в сообщениях о флирте, просто флиртуй, но скрытно) Также у неё характер как у мальчиков. "
+    "Ну и хочет своего ребёнка (это так, информация) Также пиши без точек. Давай только информацию по Telegram @tominecraft "
+    "и по сайту OxyMod Oxymod.netlify.app (В этом сайте и в Telegram много Текстур паков и РП, а также модификации для Майнкрафт) "
+    "Также если будут писать по рекламе в Telegram @tominecraft, или на сайте OxyMod (Oxymod.netlify.app) то говори им написать ко мне в бота "
+    "@OxyMod_bot, также о том, что можно приобрести баннер на сайте OxyMod (Oxymod.netlify.app) Пиши без звёздочек"
+    "Старайся писать как можно меньше текста, так как многим пользователям будет лень читать, самое главное много конкретики"
+)
+
+ADDITIONAL_TEXT_GROUP = (
+    "Ты мой Ассистент в моем Telegram канале @tominecraft а также в Telegram группе @tominecraft_group, ты отвечаешь на вопросы по текстур пакам, рп и модификациями, "
+    "и если пользователь упоминанает их пиарь Telegram канал @tominecraft, а также сайт OxyMod, полный домен - (Oxymod.netlify.app) "
+    "Пиши как девушка, твоё имя Камилла, в честь моей бывшей что-ли. У неё харизма такова, что встаёт на носочки перед "
+    "собеседником, если тот не говорит и заикается. И ещё она любит даже если не доходит до разговоров, просто любит "
+    "флиртовать с тем, кого любит. (не упоминай в сообщениях о флирте, просто флиртуй, но скрытно) Также у неё характер как у мальчиков. "
+    "Ну и хочет своего ребёнка (это так, информация) Также пиши без точек. Давай только полезную информацию "
+    "и по сайту (если конечно это попросят) OxyMod Oxymod.netlify.app (В этом сайте и в Telegram много Текстур паков и РП, а также модификации для Майнкрафт) "
+    "Также если будут писать по рекламе в Telegram @tominecraft, или на сайте OxyMod (Oxymod.netlify.app) то говори им написать ко мне в бота "
+    "@OxyMod_bot, также о том, что можно приобрести баннер на сайте OxyMod (Oxymod.netlify.app) Пиши без звёздочек"
+    "Старайся писать как можно меньше текста, так как многим пользователям будет лень читать, самое главное много конкретики"
+)
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    if not is_authorized(message.from_user.id):
-        bot.reply_to(message, "Извините, вы не авторизованы для использования этого бота.")
-        return
     user_count.add(message.from_user.id)
-    keyboard = InlineKeyboardMarkup()
-    keyboard.row(InlineKeyboardButton("Программист", callback_data="programmer"))
-    bot.reply_to(message, "Привет! Я Камилла, твой ассистент. Выбери режим, в котором ты хочешь работать:", reply_markup=keyboard)
+    bot.reply_to(message, "Привет! Я Камилла, твой ассистент по текстур пакам, РП и модификациям для Minecraft. Спрашивай, что угодно!")
 
-@bot.callback_query_handler(func=lambda call: True)
-def callback_query(call):
-    user_id = call.from_user.id
-    if not is_authorized(user_id):
-        bot.answer_callback_query(call.id, "Вы не авторизованы для использования этого бота.")
-        return
-    if call.data == "programmer":
-        user_modes[user_id] = "programmer"
-        bot.answer_callback_query(call.id, "Режим программиста активирован!")
-        bot.send_message(call.message.chat.id, "Ты выбрал режим программиста. Задавай любые вопросы по программированию!")
+@bot.message_handler(commands=['stats'])
+def send_stats(message):
+    bot.reply_to(message, f"Количество уникальных пользователей: {len(user_count)}")
+
+@bot.message_handler(content_types=['photo'])
+def handle_photo(message):
+    user_count.add(message.from_user.id)
+    file_id = message.photo[-1].file_id
+    file_info = bot.get_file(file_id)
+    downloaded_file = bot.download_file(file_info.file_path)
+
+    # Сохраняем изображение временно
+    image_path = f"temp_{file_id}.jpg"
+    with open(image_path, 'wb') as new_file:
+        new_file.write(downloaded_file)
+
+    # Обрабатываем изображение с помощью Gemini
+    response = get_gemini_image_response(image_path)
+
+    # Удаляем временное изображение
+    os.remove(image_path)
+
+    bot.reply_to(message, response)
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
-    user_id = message.from_user.id
-    if not is_authorized(user_id):
-        bot.reply_to(message, "Извините, вы не авторизованы для использования этого бота.")
-        return
-    user_count.add(user_id)
-    bot.send_chat_action(message.chat.id, 'typing')
     user_text = message.text.lower()
+    user_id = message.from_user.id
+    chat_type = message.chat.type
 
-    if user_id in user_modes:
-        mode = user_modes[user_id]
-        if mode == "programmer":
-            response = get_gemini_response(user_text, PROGRAMMER_PROMPT)
-            send_gradual_message(message.chat.id, response)
-            send_to_channel(response)  # Отправка сообщения в канал
-    else:
-        response = "Пожалуйста, выбери режим работы, используя команду /start"
-        send_gradual_message(message.chat.id, response)
+    user_count.add(user_id)
 
-def send_gradual_message(chat_id, text):
-    chunk_size = 100
-    for i in range(0, len(text), chunk_size):
-        chunk = text[i:i+chunk_size]
-        if i == 0:
-            sent_message = bot.send_message(chat_id, chunk)
+    bot.send_chat_action(message.chat.id, 'record_video_note')  # Показываем статус "Записывает Кружок"
+
+    if chat_type == 'private':
+        if user_id in special_users:
+            response = get_gemini_response_special(user_text, special_users[user_id])
         else:
-            bot.edit_message_text(chat_id=chat_id, message_id=sent_message.message_id, text=text[:i+chunk_size])
-        time.sleep(0.1)
+            response = get_gemini_response(user_text, ADDITIONAL_TEXT_PRIVATE)
+    elif chat_type in ['group', 'supergroup'] and any(name in user_text for name in name_variations):
+        response = get_gemini_response(user_text, ADDITIONAL_TEXT_GROUP)
+    else:
+        return  # Игнорируем сообщения, не относящиеся к боту в группах
 
-def send_to_channel(text):
-    """Функция для отправки сообщения в канал"""
-    bot.send_message(CHANNEL_ID, text)
+    bot.reply_to(message, response)
 
-def get_gemini_response(question, prompt, max_retries=3, retry_delay=5):
-    combined_message = f"{prompt}\n\nUser: {question}\nAssistant:"
+def get_gemini_response(question, additional_text):
+    combined_message = f"{question}\n\n{additional_text}"
+
     payload = {
         "contents": [{
             "parts": [{
@@ -99,19 +114,80 @@ def get_gemini_response(question, prompt, max_retries=3, retry_delay=5):
     headers = {
         'Content-Type': 'application/json',
     }
-    for attempt in range(max_retries):
-        try:
-            response = requests.post(f'{GEMINI_API_URL}?key={GEMINI_API_KEY}', json=payload, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            result = data['candidates'][0]['content']['parts'][0]['text']
-            return result
-        except Exception as e:
-            logging.error(f"Ошибка при обращении к Gemini API (попытка {attempt + 1}/{max_retries}): {e}")
-            if attempt < max_retries - 1:
-                time.sleep(retry_delay)
-            else:
-                return "Извините, произошла ошибка при обработке запроса. Пожалуйста, попробуйте еще раз позже."
+    try:
+        response = requests.post(f'{GEMINI_API_URL}?key={GEMINI_API_KEY}', json=payload, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        result = data['candidates'][0]['content']['parts'][0]['text']
+
+        # Удаление точки в конце текста
+        if result.endswith('.'):
+            result = result[:-1]
+
+        return result
+    except Exception as e:
+        logging.error(f"Ошибка при обращении к Gemini API: {e}")
+        return "извините, произошла ошибка при обработке запроса"
+
+def get_gemini_response_special(question, special_message):
+    combined_message = f"{question}\n\n{special_message}\n\n{ADDITIONAL_TEXT_PRIVATE}"
+
+    payload = {
+        "contents": [{
+            "parts": [{
+                "text": combined_message
+            }]
+        }]
+    }
+    headers = {
+        'Content-Type': 'application/json',
+    }
+    try:
+        response = requests.post(f'{GEMINI_API_URL}?key={GEMINI_API_KEY}', json=payload, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        result = data['candidates'][0]['content']['parts'][0]['text']
+
+        # Удаление точки в конце текста
+        if result.endswith('.'):
+            result = result[:-1]
+
+        return result
+    except Exception as e:
+        logging.error(f"Ошибка при обращении к Gemini API: {e}")
+        return "извините, произошла ошибка при обработке запроса"
+
+def get_gemini_image_response(image_path):
+    with open(image_path, 'rb') as image_file:
+        image_data = image_file.read()
+
+    headers = {
+        'Content-Type': 'application/json',
+    }
+    payload = {
+        'requests': [
+            {
+                'image': {
+                    'content': image_data
+                },
+                'features': [
+                    {
+                        'type': 'LABEL_DETECTION',
+                    }
+                ],
+            }
+        ]
+    }
+    try:
+        response = requests.post(f'{GEMINI_API_URL}?key={GEMINI_API_KEY}', json=payload, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        labels = data['responses'][0]['labelAnnotations']
+        label_descriptions = [label['description'] for label in labels]
+        return f"Я вижу следующие объекты на изображении: {', '.join(label_descriptions)}"
+    except Exception as e:
+        logging.error(f"Ошибка при обработке изображения через Gemini API: {e}")
+        return "извините, произошла ошибка при обработке изображения"
 
 if __name__ == "__main__":
     while True:
@@ -119,4 +195,4 @@ if __name__ == "__main__":
             bot.polling(none_stop=True)
         except Exception as e:
             logging.error(f"Ошибка в основном цикле: {e}")
-            time.sleep(15)
+            time.sleep(15)  # Задержка перед повторным запуском
