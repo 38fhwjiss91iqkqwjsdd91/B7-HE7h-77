@@ -44,14 +44,14 @@ def load_prompt(language, is_private=True):
                 with open('Russian-promt.py', 'r', encoding='utf-8') as f:
                     return f.read()
             else:
-                with open('Russian-promt.py', 'r', encoding='utf-8') as f:
+                with open('Russian-promt-group.py', 'r', encoding='utf-8') as f:
                     return f.read()
         else:
             if is_private:
                 with open('American-promt.py', 'r', encoding='utf-8') as f:
                     return f.read()
             else:
-                with open('American-promt.py', 'r', encoding='utf-8') as f:
+                with open('American-promt-group.py', 'r', encoding='utf-8') as f:
                     return f.read()
     except FileNotFoundError:
         logging.error(f"Файл промта для языка {language} не найден!")
