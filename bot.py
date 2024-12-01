@@ -6,7 +6,7 @@ import time
 from collections import defaultdict
 
 API_KEY = '7441566490:AAHgpFjpFmWrkJVr-QF-n1T74-PR30eXYCM'
-GEMINI_API_KEY = 'AIzaSyD5UcnXASfVpUa6UElDxYqZU6hxxwttj5M'
+GEMINI_API_KEY = 'AIzaSyA8DmFWWdk7ni5gaNHL_3Vkv2nMox-WB6M'
 GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent'
 CHANNEL_ID = '@Monopolist_Survivor'  # ID или @username канала
 
